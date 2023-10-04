@@ -25,7 +25,7 @@ import "github.com/markpassawat/go-pulse"
 
 ## Quick start
 
-You can explore a variety of ready-to-run examples in the [Pulse example repository](https://github.com/markpassawat/go-pulse/example).
+You can explore a variety of ready-to-run examples in the [Pulse example repository](https://github.com/markpassawat/go-pulse/blob/main/example/basic/main.go).
 
 ### Broadcasting and Monitoring a Transaction
 
