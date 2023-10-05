@@ -3,8 +3,10 @@ package pulse
 import (
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"time"
 
+	v "github.com/go-ozzo/ozzo-validation/v4"
 	"github.com/go-resty/resty/v2"
 	"github.com/sirupsen/logrus"
 )
@@ -16,6 +18,15 @@ type Asset struct {
 	Price uint64 `json:"price"`
 	// Timestamp is the timestamp price retrieval.
 	Timestamp uint64 `json:"timestamp"`
+}
+
+// Validate validates the asset data request.
+func (a Asset) Validate() error {
+	return v.ValidateStruct(&a,
+		v.Field(&a.Symbol, v.Required),
+		v.Field(&a.Price, v.Required),
+		v.Field(&a.Timestamp, v.Required),
+	)
 }
 
 type broadcastResponse struct {
@@ -71,6 +82,9 @@ type pulse struct {
 	pulse  time.Duration
 }
 
+// Ensure pulse implements IPulse.
+var _ IPulse = new(pulse)
+
 // New returns a new pulse client with options
 func New(opts *Options) *pulse {
 	if opts.URL == "" {
@@ -97,6 +111,10 @@ func NewPulse() *pulse {
 // Broadcast broadcasts the asset data to the server.
 // It returns the transaction hash and error if any.
 func (p *pulse) Broadcast(asset *Asset) (*broadcastResponse, error) {
+	if err := asset.Validate(); err != nil {
+		return nil, fmt.Errorf("validate failed broadcast_asset: %w", err)
+	}
+
 	var result broadcastResponse
 	resp, err := p.client.R().
 		SetBody(Asset{
@@ -107,9 +125,14 @@ func (p *pulse) Broadcast(asset *Asset) (*broadcastResponse, error) {
 	if err != nil {
 		return nil, fmt.Errorf("request failed broadcast_asset: %w", err)
 	}
+	if resp.StatusCode() >= http.StatusBadRequest {
+		return nil, fmt.Errorf("broadcast failed: %v", err)
+	}
+
 	if err := json.Unmarshal(resp.Body(), &result); err != nil {
 		return nil, fmt.Errorf("unmarshal failed broadcast_asset: %w", err)
 	}
+
 	return &result, nil
 }
 
@@ -139,6 +162,9 @@ func (p *pulse) MonitorStatus(txHash string) (*txHashData, error) {
 		}).SetResult(&result).Get("/check/{tx_hash}")
 		if err != nil {
 			return nil, fmt.Errorf("request failed monitor_status: %w", err)
+		}
+		if resp.StatusCode() >= http.StatusBadRequest {
+			return nil, fmt.Errorf("monitor status failed: %v", err)
 		}
 
 		if err := json.Unmarshal(resp.Body(), &result); err != nil {
@@ -182,6 +208,10 @@ func (p *pulse) MultipleMonitorStatus(txsHash ...string) []txHashData {
 
 // BroadcastAndMonitor broadcasts the asset data to the server and monitor its status.
 func (p *pulse) BroadcastAndMonitor(asset *Asset) (*txHashData, error) {
+	if err := asset.Validate(); err != nil {
+		return nil, fmt.Errorf("validate failed broadcast_and_monitor: %w", err)
+	}
+
 	var result txHashData
 	resp, err := p.client.R().
 		SetBody(Asset{
@@ -192,6 +222,10 @@ func (p *pulse) BroadcastAndMonitor(asset *Asset) (*txHashData, error) {
 	if err != nil {
 		return nil, fmt.Errorf("request failed broadcast_and_monitor: %w", err)
 	}
+	if resp.StatusCode() >= http.StatusBadRequest {
+		return nil, fmt.Errorf("broadcast failed: %v", err)
+	}
+
 	if err := json.Unmarshal(resp.Body(), &result); err != nil {
 		return nil, fmt.Errorf("unmarshal failed broadcast_and_monitor: %w", err)
 	}
